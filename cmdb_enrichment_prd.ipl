@@ -1,0 +1,106 @@
+//----------------------------------------------------------------------
+// ++ policyName: cmdb_enrichment_prd.ipl
+// Author: Samuel Januario (samuel.januario01@gmail.com)
+// Date: 29/09/2017
+// Purpose: Gather CMDB business attributes for Netcool Event enrichment
+// This policy only collects data from ComputerSystem objects within CMDB
+//----------------------------------------------------------------------
+
+//----------------------------------------------------------------------
+// ++ Requirements:
+// CI DataType, example: CIPRD
+// Netcool ObjectServer with custom fields
+// Netcool alerts.status DataType, example: alerts_status
+//----------------------------------------------------------------------
+
+log("Start policy: cmdb_enrichment_prd.");
+//EventContainer.EventReaderName="defaultobjectserver";
+InNode = ToUpper(EventContainer.Node) + "%";
+DataType = "CIPRD";
+Filter = "(ciname LIKE '"+InNode+"')";
+CountOnly = false;
+getNodes = GetByFilter( DataType, Filter, CountOnly);
+NumNodes = length(getNodes);
+log("Filter:" +Filter);
+log("EnrichmentOrgNodes:" +getNodes);
+log("GetByFilter successful. Found "+NumNodes+" dataItem(s).");
+
+  Index = 0;
+  while (NumNodes > 0) {
+
+      ReverseGetStructureId = getNodes[Index].classstructureid;
+      log("Processing node: " +EventContainer.Node);
+      log("ReverseGetStructureId:" +ReverseGetStructureId);
+      getClassificationId = GetByFilter('CLASSSTRUCTUREPRD', "(classstructureid = '"+ReverseGetStructureId+"')" , false);
+      log("getClassificationId:" +getClassificationId[Index].classificationid);
+      if ( Trim(getClassificationId[Index].classificationid) LIKE "CI.*COMPUTERSYSTEM" ) {
+          log ("Server CI:");
+          log ("Environment:" +getNodes[Index].environment);
+          log ("Status:" +getNodes[Index].status);
+          log ("CIType:" +getNodes[Index].type);
+          log ("--------------------------------------");
+          if (Trim(getNodes[Index].status) LIKE "IN.OPERATION") {
+            @CIStatus = "In Operation";
+            @CIGroup = "MYSUPPORTTEAM";
+            @Node = ToLower(@Node);
+          }
+          if (Trim(getNodes[Index].status) LIKE "NEW") {
+            @CIStatus = "New";
+            @SuppressEscl = 4;
+            @ExpireTime = 60;
+            @Node = ToLower(@Node);
+            @Summary = "Event suppressed by policy cmdb_enrichment_prd - " +EventContainer.Summary;
+          }
+          if (Trim(getNodes[Index].status) LIKE "DECOMMISSIONED") {
+            @CIStatus = "Decommissioned";
+            @SuppressEscl = 4;
+            @ExpireTime = 60;
+            @Node = ToLower(@Node);
+            @Summary = "Event suppressed by policy cmdb_enrichment_prd - " +EventContainer.Summary;
+          }
+          if (Trim(getNodes[Index].status) LIKE "IN.BUILD") {
+            @CIP_CIStatus = "In Build";
+            @SuppressEscl = 4;
+            @ExpireTime = 60;
+            @Node = ToLower(@Node);
+            @Summary = "Event suppressed by policy cmdb_enrichment_prd - " +EventContainer.Summary;
+          }
+          if (Trim(getNodes[Index].status) LIKE "IN.MAINTENANCE") {
+            @CIP_CIStatus = "In Maintenance";
+            @SuppressEscl = 6;
+            @ExpireTime = 60;
+            @Node = ToLower(@Node);
+            @Summary = "Event suppressed by policy cmdb_enrichment_prd - " +EventContainer.Summary;
+          }
+          if (getNodes[Index].environment != NULL) {
+            @CIEnvironment = ''+ getNodes[Index].environment;
+          }
+          if (getNodes[Index].type != NULL) {
+            @CIType = ''+ getNodes[Index].type;
+          }
+          if (getNodes[Index].cinum != NULL) {
+            @CINUM =  getNodes[Index].cinum;
+            log("CINUM: " + getNodes[Index].cinum);
+          }
+          if (getNodes[Index].pmcciimpact != NULL) {
+            @CIImpact = getNodes[Index].pmcciimpact;
+          }
+
+        }
+        else {
+          @EnrichmentFlag = 100;
+          @Node = ToLower(@Node);
+          log("No CI was found on CMDB for: " +EventContainer.Node);
+        }
+        NumNodes = NumNodes - 1;
+        Index = Index + 1;
+        log ("NumNodes: " +NumNodes);
+        log ("Index: " +Index);
+        @EnrichmentFlag = 1;
+        ReturnEvent(EventContainer);
+        log("ReturnEvent successful");
+
+}
+ReturnEvent(EventContainer);
+
+log("ReturnEvent successful");
